@@ -123,6 +123,36 @@
   .empty .eg { margin-top: 8px; font-size: 13px; color: var(--muted); font-style: italic; max-width: 34ch; }
   .hint { text-align: center; color: var(--muted); font-size: 13px; margin-top: 18px; }
 
+  /* Payment cards: stacked in one grid cell, each offset by its peek */
+  .section-h { font-size: 22px; font-weight: 700; letter-spacing: -.01em; margin: 28px 0 12px; }
+  .cards { display: grid; margin-bottom: 4px; }
+  .card {
+    grid-area: 1 / 1; aspect-ratio: 1.586; max-width: 100%; perspective: 1400px; cursor: pointer; outline: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .card:focus-visible .cface { box-shadow: 0 0 0 3px #0a84ff, var(--shadow); }
+  .card.flipped .flip { transform: rotateY(180deg); }
+  .cface {
+    position: absolute; inset: 0; border-radius: 14px; overflow: hidden; box-shadow: var(--shadow);
+    background: radial-gradient(120% 140% at 0% 0%, rgba(255,255,255,.22), rgba(255,255,255,0) 55%), linear-gradient(135deg, var(--c), var(--c2));
+    color: var(--t); backface-visibility: hidden; -webkit-backface-visibility: hidden;
+    display: flex; flex-direction: column; justify-content: space-between; padding: 16px 18px; box-sizing: border-box;
+  }
+  .cface.back { transform: rotateY(180deg); justify-content: flex-start; gap: 8px; }
+  .c-top, .c-bot { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .c-bot { align-items: flex-end; }
+  .c-issuer { font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
+  .c-type { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--l); }
+  .c-mid { display: flex; align-items: center; gap: 12px; }
+  .c-num { font-size: 17px; font-weight: 500; letter-spacing: .12em; font-variant-numeric: tabular-nums; }
+  .c-name { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--l); margin-top: 4px; }
+  .c-net { font-size: 15px; font-weight: 800; font-style: italic; letter-spacing: .02em; }
+  .c-demo { position: absolute; right: 14px; top: 50%; transform: translateY(-50%) rotate(-8deg); font-size: 11px; font-weight: 800; letter-spacing: .18em; border: 1.5px solid var(--l); color: var(--l); border-radius: 6px; padding: 3px 7px; }
+  .cface.back dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 14px; }
+  .cface.back dt { color: var(--l); font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; align-self: center; }
+  .cface.back dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+  .cface.back .fine { margin-top: auto; font-size: 11.5px; color: var(--l); line-height: 1.35; }
+
   @media (prefers-reduced-motion: reduce) {
     .stack, .pass, .flip, .info { transition: none !important; }
   }
@@ -130,9 +160,11 @@
 
 <main class="app">
   <div class="top">
-    <h1>Tickets</h1>
+    <h1>Wallet</h1>
     <span class="count" id="count"></span>
   </div>
+  <div class="cards" id="cards"></div>
+  <h2 class="section-h" id="ticketsH" hidden>Tickets</h2>
   <div class="stack" id="stack" aria-live="polite"></div>
   <div id="status"></div>
   <p class="hint" id="hint" hidden>Tap a ticket to open it. Tap ⓘ for details.</p>
@@ -358,6 +390,67 @@
     return `<div class="empty">${ticketIcon}<h2>${esc(title)}</h2><p>${esc(body)}</p></div>`;
   }
 
+  // Payment cards (display only)
+  const cardsEl = document.getElementById('cards');
+  const ticketsH = document.getElementById('ticketsH');
+  const CARD_PEEK = 56;
+  const chip = `<svg width="38" height="28" viewBox="0 0 38 28" aria-hidden="true"><rect x=".5" y=".5" width="37" height="27" rx="5" fill="#d9b86c" stroke="rgba(0,0,0,.25)"/><path d="M0 9.5h12M0 18.5h12M26 9.5h12M26 18.5h12M12 0v28M26 0v28M12 14h14" stroke="rgba(0,0,0,.28)" fill="none"/></svg>`;
+  const wave = `<svg width="20" height="22" viewBox="0 0 20 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="opacity:.8"><path d="M4 6c2 3 2 7 0 10M9 3c3.5 4.5 3.5 11.5 0 16M14 1c4.5 6 4.5 14 0 20"/></svg>`;
+  function shade(hex, f) {
+    const rgb = hexToRgb(hex) || [40, 40, 40];
+    return '#' + rgb.map(v => Math.max(0, Math.min(255, Math.round(v * f))).toString(16).padStart(2, '0')).join('');
+  }
+  function buildCard(c, i) {
+    const color = hexToRgb(c.color) ? c.color : '#2c2c2e';
+    const { t: tc, l: lc } = textFor(color);
+    const last4 = String(c.last4 || '0000').slice(-4);
+    const el = document.createElement('div');
+    el.className = 'card';
+    el.tabIndex = 0;
+    el.setAttribute('role', 'button');
+    el.setAttribute('aria-label', `${c.issuer || 'Card'} ${c.type || ''} ending in ${last4}. Tap for details.`);
+    el.style.marginTop = `${i * CARD_PEEK}px`;
+    el.style.zIndex = i + 1;
+    el.style.setProperty('--c', color);
+    el.style.setProperty('--c2', c.color2 && hexToRgb(c.color2) ? c.color2 : shade(color, .55));
+    el.style.setProperty('--t', tc);
+    el.style.setProperty('--l', lc);
+    const details = [
+      ['Card', `•••• ${last4}`], ['Type', c.type], ['Holder', c.holder], ['Expires', c.expires], ['Balance', c.balance],
+    ].filter(([, v]) => v);
+    el.innerHTML = `
+      <div class="flip">
+        <div class="cface front">
+          <div class="c-top"><span class="c-issuer">${esc(c.issuer || 'Card')}</span><span class="c-type">${esc(c.type || '')}</span></div>
+          <div class="c-mid">${chip}${wave}</div>
+          ${c.demo !== false ? '<span class="c-demo">DEMO</span>' : ''}
+          <div class="c-bot">
+            <div><div class="c-num">•••• ${esc(last4)}</div>${c.holder ? `<div class="c-name">${esc(c.holder)}</div>` : ''}</div>
+            <span class="c-net">${esc(c.network || '')}</span>
+          </div>
+        </div>
+        <div class="cface back" aria-hidden="true">
+          <div class="c-top"><span class="c-issuer">${esc(c.issuer || 'Card')}</span><span class="c-type">Details</span></div>
+          <dl>${details.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+          <p class="fine">${esc(c.note || 'Display only. This is not a real card and cannot make payments.')}</p>
+        </div>
+      </div>`;
+    const flip = () => {
+      const on = !el.classList.contains('flipped');
+      el.classList.toggle('flipped', on);
+      el.querySelector('.back').setAttribute('aria-hidden', String(!on));
+      el.querySelector('.front').setAttribute('aria-hidden', String(on));
+    };
+    el.addEventListener('click', flip);
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } });
+    return el;
+  }
+  function renderCards(list) {
+    list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    cardsEl.replaceChildren(...list.map(buildCard));
+    ticketsH.hidden = !list.length;
+  }
+
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && selected) { onTap(selected); }
   });
@@ -371,6 +464,9 @@
       statusEl.innerHTML = messageHTML('Tickets unavailable', 'Sign in to claude.ai to see your saved tickets.');
       return;
     }
+    db.collection('cards').onSnapshot(snap => {
+      renderCards(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, () => {});
     db.collection('tickets').onSnapshot(snap => {
       tickets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       render();
