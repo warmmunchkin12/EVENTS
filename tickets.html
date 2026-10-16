@@ -1,29 +1,30 @@
 <title>Ticket Wallet</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
-  /* Layout: one centered column like Apple Wallet; passes stack with only their header strips showing, tap to bring one forward. */
+  /* Layout: one centered column like Apple Wallet. Cards and tickets share one stack, only their top strips showing;
+     tap one to bring it forward, swipe sideways to move to the next. */
   :root {
     --bg: #f2f2f7;
     --fg: #1c1c1e;
     --muted: #6e6e73;
     --ghost: #c7c7cc;
     --ghost-fill: rgba(255,255,255,.55);
+    --dot: rgba(60,60,67,.3);
+    --dot-on: #1c1c1e;
     --shadow: 0 1px 2px rgba(0,0,0,.08), 0 8px 24px rgba(0,0,0,.10);
     --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", system-ui, Arial, sans-serif;
-    --seg-bg: rgba(118,118,128,.12);
-    --seg-on: #fff;
-    --pass-h: 470px;
-    --peek: 66px;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #000; --fg: #f5f5f7; --muted: #98989f; --ghost: #3a3a3c; --ghost-fill: rgba(255,255,255,.04); --seg-bg: rgba(118,118,128,.24); --seg-on: #636366;
+      --bg: #000; --fg: #f5f5f7; --muted: #98989f; --ghost: #3a3a3c; --ghost-fill: rgba(255,255,255,.04);
+      --dot: rgba(235,235,245,.3); --dot-on: #f5f5f7;
       --shadow: 0 1px 2px rgba(0,0,0,.6), 0 10px 30px rgba(0,0,0,.6);
       color-scheme: dark;
     }
   }
   :root[data-theme="dark"] {
-    --bg: #000; --fg: #f5f5f7; --muted: #98989f; --ghost: #3a3a3c; --ghost-fill: rgba(255,255,255,.04); --seg-bg: rgba(118,118,128,.24); --seg-on: #636366;
+    --bg: #000; --fg: #f5f5f7; --muted: #98989f; --ghost: #3a3a3c; --ghost-fill: rgba(255,255,255,.04);
+    --dot: rgba(235,235,245,.3); --dot-on: #f5f5f7;
     --shadow: 0 1px 2px rgba(0,0,0,.6), 0 10px 30px rgba(0,0,0,.6);
     color-scheme: dark;
   }
@@ -41,16 +42,22 @@
   .top .count { color: var(--muted); font-size: 15px; padding-bottom: 4px; font-variant-numeric: tabular-nums; }
 
   /* Stack */
-  .stack { position: relative; transition: height .45s cubic-bezier(.2,.8,.2,1); }
-  .pass {
-    position: absolute; left: 0; right: 0; top: 0; height: var(--pass-h);
+  .stack { position: relative; transition: height .45s cubic-bezier(.2,.8,.2,1); touch-action: pan-y; }
+  .item {
+    position: absolute; left: 0; right: 0; top: 0;
     perspective: 1400px; cursor: pointer; outline: none;
-    transition: transform .45s cubic-bezier(.2,.8,.2,1), filter .3s;
-    -webkit-tap-highlight-color: transparent;
+    transition: transform .45s cubic-bezier(.2,.8,.2,1);
+    -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none;
   }
-  .pass:focus-visible .face { box-shadow: 0 0 0 3px #0a84ff, var(--shadow); }
+  .item:focus-visible .face, .item:focus-visible .cface { box-shadow: 0 0 0 3px #0a84ff, var(--shadow); }
   .flip { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .6s cubic-bezier(.3,.7,.2,1); }
-  .pass.flipped .flip { transform: rotateY(180deg); }
+  .item.flipped .flip { transform: rotateY(180deg); }
+
+  .dots { position: absolute; left: 0; right: 0; display: flex; justify-content: center; gap: 8px; transition: opacity .3s; pointer-events: none; }
+  .dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--dot); }
+  .dots i.on { background: var(--dot-on); }
+
+  /* Ticket faces */
   .face {
     position: absolute; inset: 0; border-radius: 14px; overflow: hidden;
     background: var(--c); color: var(--t);
@@ -61,8 +68,8 @@
     -webkit-mask: radial-gradient(circle 15px at 50% 0, transparent 14px, #000 15px);
             mask: radial-gradient(circle 15px at 50% 0, transparent 14px, #000 15px);
   }
-  .face.back { transform: rotateY(180deg); }
-  .face::before { /* soft sheen */
+  .face.back, .cface.back { transform: rotateY(180deg); }
+  .face::before {
     content: ""; position: absolute; inset: 0; pointer-events: none;
     background: linear-gradient(160deg, rgba(255,255,255,.16), rgba(255,255,255,0) 40%, rgba(0,0,0,.10));
   }
@@ -70,13 +77,13 @@
   .lbl { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--l); }
   .val { display: block; font-size: 17px; font-weight: 500; line-height: 1.2; overflow-wrap: anywhere; }
 
-  .p-head { height: var(--peek); flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px; position: relative; }
+  .p-head { height: 66px; flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px; position: relative; }
   .p-head .name { font-size: 17px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .p-head .hf { text-align: right; flex: none; }
   .p-head .hf .val { font-variant-numeric: tabular-nums; }
 
   .p-strip { flex: none; padding: 14px 16px 16px; background: rgba(0,0,0,.14); position: relative; display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
-  .p-strip h2 { margin: 2px 0 0; font-size: 26px; font-weight: 700; line-height: 1.1; letter-spacing: -.02em; text-wrap: balance; overflow-wrap: anywhere; }
+  .p-strip h2 { margin: 2px 0 0; font-size: 28px; font-weight: 800; line-height: 1.05; letter-spacing: -.01em; text-wrap: balance; overflow-wrap: anywhere; }
   .p-strip .when { font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--l); padding-bottom: 3px; }
 
   .p-row { display: flex; gap: 14px; padding: 12px 16px 0; position: relative; }
@@ -89,7 +96,15 @@
   .qr { background: #fff; padding: 9px; border-radius: 8px; width: 132px; height: 132px; box-sizing: border-box; display: grid; place-items: center; }
   .qr img, .qr canvas { width: 114px !important; height: 114px !important; image-rendering: pixelated; }
   .qr .nocode { color: #1c1c1e; font-size: 11px; text-align: center; }
+  .qr.sample { background: repeating-linear-gradient(45deg, #fff 0 8px, #ececec 8px 16px); color: #1c1c1e; text-align: center; font-size: 11px; font-weight: 600; line-height: 1.35; }
+  .qr.sample b { display: block; font-size: 15px; letter-spacing: .14em; }
   .p-code .codetext { font-size: 11px; font-variant-numeric: tabular-nums; letter-spacing: .04em; color: var(--l); }
+
+  .stamp {
+    position: absolute; left: 50%; top: 55%; transform: translate(-50%, -50%) rotate(-18deg);
+    font-size: 64px; font-weight: 900; letter-spacing: .12em; color: var(--t); opacity: .2;
+    border: 5px solid currentColor; border-radius: 14px; padding: 2px 18px; pointer-events: none; white-space: nowrap;
+  }
 
   .info {
     position: absolute; right: 12px; bottom: 12px; width: 30px; height: 30px; border-radius: 50%;
@@ -97,21 +112,44 @@
     display: grid; place-items: center; opacity: 0; pointer-events: none; transition: opacity .25s;
   }
   .info:focus-visible, .done:focus-visible { outline: 2px solid var(--t); outline-offset: 2px; }
-  .pass.sel .info { opacity: 1; pointer-events: auto; }
+  .item.sel .info { opacity: 1; pointer-events: auto; }
 
   .back-in { padding: 0 16px 16px; overflow-y: auto; flex: 1; position: relative; }
-  .back-in dl { margin: 0; display: grid; gap: 0; }
-  .back-in .item { padding: 11px 0; border-bottom: 1px solid rgba(127,127,127,.28); }
-  .back-in .item:last-child { border-bottom: 0; }
+  .back-in dl { margin: 0; display: grid; }
+  .back-in .row { padding: 11px 0; border-bottom: 1px solid rgba(127,127,127,.28); }
+  .back-in .row:last-child { border-bottom: 0; }
   .back-in dt { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--l); margin-bottom: 3px; }
   .back-in dd { margin: 0; font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; white-space: pre-line; }
   .done {
     border: 0; background: rgba(0,0,0,.18); color: var(--t); border-radius: 999px;
-    font: 600 14px/1 var(--font); padding: 8px 14px; cursor: pointer;
+    font: 600 14px/1 var(--font); padding: 8px 14px; cursor: pointer; flex: none;
   }
 
-  .pass.expired .face { filter: saturate(.35) brightness(.92); }
+  .item.expired .face { filter: saturate(.35) brightness(.92); }
   .tag { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .06em; padding: 3px 6px; border-radius: 5px; background: rgba(0,0,0,.22); color: var(--t); vertical-align: middle; margin-left: 6px; }
+
+  /* Payment card faces */
+  .cface {
+    position: absolute; inset: 0; border-radius: 14px; overflow: hidden; box-shadow: var(--shadow);
+    background: radial-gradient(120% 140% at 0% 0%, rgba(255,255,255,.22), rgba(255,255,255,0) 55%), linear-gradient(135deg, var(--c), var(--c2));
+    color: var(--t); backface-visibility: hidden; -webkit-backface-visibility: hidden;
+    display: flex; flex-direction: column; justify-content: space-between; padding: 16px 18px; box-sizing: border-box;
+  }
+  .cface.back { justify-content: flex-start; gap: 10px; }
+  .c-top, .c-bot { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .c-bot { align-items: flex-end; }
+  .c-issuer { font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
+  .c-type { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--l); }
+  .c-mid { display: flex; align-items: center; gap: 12px; }
+  .c-num { font-size: 17px; font-weight: 500; letter-spacing: .12em; font-variant-numeric: tabular-nums; }
+  .c-name { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--l); margin-top: 4px; }
+  .c-net { font-size: 15px; font-weight: 800; font-style: italic; letter-spacing: .02em; }
+  .c-demo { position: absolute; right: 14px; top: 50%; transform: translateY(-50%) rotate(-8deg); font-size: 11px; font-weight: 800; letter-spacing: .18em; border: 1.5px solid var(--l); color: var(--l); border-radius: 6px; padding: 3px 7px; }
+  .cface .info { bottom: auto; top: 50%; transform: translateY(-50%); right: 60px; }
+  .cface.back dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 14px; }
+  .cface.back dt { color: var(--l); font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; align-self: center; }
+  .cface.back dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+  .cface.back .fine { margin: auto 0 0; font-size: 11.5px; color: var(--l); line-height: 1.35; }
 
   /* Empty / status states */
   .empty {
@@ -122,44 +160,10 @@
   .empty svg { color: var(--muted); }
   .empty h2 { margin: 6px 0 0; font-size: 20px; font-weight: 600; }
   .empty p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.45; max-width: 30ch; }
-  .empty .eg { margin-top: 8px; font-size: 13px; color: var(--muted); font-style: italic; max-width: 34ch; }
   .hint { text-align: center; color: var(--muted); font-size: 13px; margin-top: 18px; }
 
-  /* Payment cards: stacked in one grid cell, each offset by its peek */
-  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 2px; border-radius: 9px; background: var(--seg-bg); margin-bottom: 18px; }
-  .seg button { border: 0; background: transparent; color: var(--fg); font: 600 14px/1 var(--font); padding: 8px 0; border-radius: 7px; cursor: pointer; }
-  .seg button[aria-selected="true"] { background: var(--seg-on); box-shadow: 0 1px 3px rgba(0,0,0,.18); }
-  .seg button:focus-visible { outline: 2px solid #0a84ff; outline-offset: 1px; }
-  .cards { display: grid; margin-bottom: 4px; }
-  .card {
-    grid-area: 1 / 1; aspect-ratio: 1.586; max-width: 100%; perspective: 1400px; cursor: pointer; outline: none;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .card:focus-visible .cface { box-shadow: 0 0 0 3px #0a84ff, var(--shadow); }
-  .card.flipped .flip { transform: rotateY(180deg); }
-  .cface {
-    position: absolute; inset: 0; border-radius: 14px; overflow: hidden; box-shadow: var(--shadow);
-    background: radial-gradient(120% 140% at 0% 0%, rgba(255,255,255,.22), rgba(255,255,255,0) 55%), linear-gradient(135deg, var(--c), var(--c2));
-    color: var(--t); backface-visibility: hidden; -webkit-backface-visibility: hidden;
-    display: flex; flex-direction: column; justify-content: space-between; padding: 16px 18px; box-sizing: border-box;
-  }
-  .cface.back { transform: rotateY(180deg); justify-content: flex-start; gap: 8px; }
-  .c-top, .c-bot { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-  .c-bot { align-items: flex-end; }
-  .c-issuer { font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
-  .c-type { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--l); }
-  .c-mid { display: flex; align-items: center; gap: 12px; }
-  .c-num { font-size: 17px; font-weight: 500; letter-spacing: .12em; font-variant-numeric: tabular-nums; }
-  .c-name { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--l); margin-top: 4px; }
-  .c-net { font-size: 15px; font-weight: 800; font-style: italic; letter-spacing: .02em; }
-  .c-demo { position: absolute; right: 14px; top: 50%; transform: translateY(-50%) rotate(-8deg); font-size: 11px; font-weight: 800; letter-spacing: .18em; border: 1.5px solid var(--l); color: var(--l); border-radius: 6px; padding: 3px 7px; }
-  .cface.back dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 14px; }
-  .cface.back dt { color: var(--l); font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; align-self: center; }
-  .cface.back dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
-  .cface.back .fine { margin-top: auto; font-size: 11.5px; color: var(--l); line-height: 1.35; }
-
   @media (prefers-reduced-motion: reduce) {
-    .stack, .pass, .flip, .info { transition: none !important; }
+    .stack, .item, .flip, .info, .dots { transition: none !important; }
   }
 </style>
 
@@ -168,20 +172,9 @@
     <h1>Wallet</h1>
     <span class="count" id="count"></span>
   </div>
-  <div class="seg" role="tablist" aria-label="Wallet sections">
-    <button type="button" role="tab" id="tab-cards" aria-controls="view-cards" aria-selected="false">Cards</button>
-    <button type="button" role="tab" id="tab-tickets" aria-controls="view-tickets" aria-selected="true">Tickets</button>
-  </div>
-  <section id="view-cards" role="tabpanel" aria-labelledby="tab-cards" hidden>
-    <div class="cards" id="cards"></div>
-    <div id="cardsEmpty"></div>
-    <p class="hint">Tap a card to see its details.</p>
-  </section>
-  <section id="view-tickets" role="tabpanel" aria-labelledby="tab-tickets">
-    <div class="stack" id="stack" aria-live="polite"></div>
-    <div id="status"></div>
-    <p class="hint" id="hint" hidden>Tap a ticket to open it. Tap ⓘ for details.</p>
-  </section>
+  <div class="stack" id="stack" aria-live="polite"></div>
+  <div id="status"></div>
+  <p class="hint" id="hint" hidden>Tap a card or ticket to open it. Swipe sideways to switch.</p>
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -192,18 +185,20 @@
   const countEl = document.getElementById('count');
   const hintEl = document.getElementById('hint');
   const PALETTE = ['#c7253e', '#1f4e8c', '#0f7b5f', '#6b2fa3', '#d9822b', '#1c1c1e', '#b0336d', '#2a6f97'];
+  const PASS_H = 470, PASS_PEEK = 66, CARD_PEEK = 54;
 
-  let tickets = [];
-  let selected = null;
-  let ticketCountText = '';
+  let cards = [], tickets = [];
+  let loadedCards = false, loadedTickets = false;
+  let selected = null;          // key like "card:abc" or "ticket:xyz"
+  let suppressClick = false;
+
+  const dots = document.createElement('div');
+  dots.className = 'dots';
+  dots.setAttribute('aria-hidden', 'true');
 
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-  function parseDate(s) {
-    if (!s) return null;
-    const d = new Date(s);
-    return isNaN(d) ? null : d;
-  }
+  function parseDate(s) { if (!s) return null; const d = new Date(s); return isNaN(d) ? null : d; }
   function hexToRgb(h) {
     const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(h || '').trim());
     if (!m) return null;
@@ -216,6 +211,10 @@
     const L = .2126 * r + .7152 * g + .0722 * b;
     return L > .45 ? { t: '#111', l: 'rgba(0,0,0,.6)' } : { t: '#fff', l: 'rgba(255,255,255,.72)' };
   }
+  function shade(hex, f) {
+    const rgb = hexToRgb(hex) || [40, 40, 40];
+    return '#' + rgb.map(v => Math.max(0, Math.min(255, Math.round(v * f))).toString(16).padStart(2, '0')).join('');
+  }
   function fmtShort(d) { return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }).toUpperCase(); }
   function fmtTime(d) { return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }); }
   function fmtLong(d) { return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) + ' at ' + fmtTime(d); }
@@ -224,46 +223,57 @@
     if (!d) return '';
     const days = Math.round((startOfDay(d) - startOfDay(new Date())) / 864e5);
     if (days < 0) return 'Ended';
-    if (days === 0) return 'Today';
+    if (days === 0) return 'Tonight';
     if (days === 1) return 'Tomorrow';
     if (days < 60) return `In ${days} days`;
     return `In ${Math.round(days / 30)} months`;
   }
-  function isExpired(t) {
-    const d = parseDate(t.date);
-    if (!d) return false;
-    return startOfDay(d) < startOfDay(new Date());
-  }
-
+  function isExpired(t) { const d = parseDate(t.date); return d ? startOfDay(d) < startOfDay(new Date()) : false; }
   function sortTickets(list) {
     const up = list.filter(t => !isExpired(t)).sort((a, b) => (parseDate(a.date) || Infinity) - (parseDate(b.date) || Infinity));
     const past = list.filter(isExpired).sort((a, b) => parseDate(b.date) - parseDate(a.date));
     return [...up, ...past];
   }
-
   function field(label, value, cls = '') {
     if (value == null || value === '') return '';
     return `<div class="${cls}"><span class="lbl">${esc(label)}</span><span class="val">${esc(value)}</span></div>`;
   }
 
-  function buildPass(t, i) {
-    const d = parseDate(t.date);
-    const color = hexToRgb(t.color) ? t.color : PALETTE[i % PALETTE.length];
+  function makeItem(kind, id, color, label) {
     const { t: tc, l: lc } = textFor(color);
-    const expired = isExpired(t);
     const el = document.createElement('article');
-    el.className = 'pass' + (expired ? ' expired' : '');
-    el.dataset.id = t.id;
+    el.className = 'item ' + kind;
+    el.dataset.key = kind + ':' + id;
+    el.dataset.kind = kind;
     el.tabIndex = 0;
     el.setAttribute('role', 'button');
-    el.setAttribute('aria-label', `${t.event || 'Ticket'}${d ? ', ' + fmtLong(d) : ''}`);
+    el.setAttribute('aria-label', label);
     el.style.setProperty('--c', color);
     el.style.setProperty('--t', tc);
     el.style.setProperty('--l', lc);
+    return el;
+  }
+
+  function wire(el) {
+    el.querySelector('.info').addEventListener('click', e => { e.stopPropagation(); setFlipped(el, true); });
+    el.querySelector('.done').addEventListener('click', e => { e.stopPropagation(); setFlipped(el, false); });
+    el.addEventListener('click', () => { if (!suppressClick) onTap(el.dataset.key); });
+    el.addEventListener('keydown', e => {
+      if (e.target !== el) return;
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onTap(el.dataset.key); }
+    });
+  }
+
+  function buildTicket(t, i) {
+    const d = parseDate(t.date);
+    const color = hexToRgb(t.color) ? t.color : PALETTE[i % PALETTE.length];
+    const expired = isExpired(t);
+    const el = makeItem('ticket', t.id, color, `${t.event || 'Ticket'}${d ? ', ' + fmtLong(d) : ''}${t.demo ? ', demo ticket' : ''}`);
+    if (expired) el.classList.add('expired');
 
     const time = t.time || (d ? fmtTime(d) : '');
     const seatRow = [field('Gate', t.gate), field('Section', t.section), field('Row', t.row), field('Seat', t.seat)].filter(Boolean);
-    if (!seatRow.length && t.admit) seatRow.push(field('Admit', t.admit));
+    if (t.admit) seatRow.push(field('Admit', t.admit));
     const headline = t.performer || t.subtitle || t.venue || 'Admission';
 
     const backItems = [
@@ -279,7 +289,7 @@
       ['Sold by', t.organizer],
       ['Price', t.price],
       ['Notes', t.notes],
-      ['Ticket code', t.code],
+      ['Ticket code', t.demo ? '' : t.code],
     ].filter(([, v]) => v != null && v !== '');
 
     el.innerHTML = `
@@ -291,174 +301,53 @@
           </header>
           <div class="p-strip">
             <div style="min-width:0">
-              <span class="lbl">${esc(t.performer ? 'Featuring' : (t.subtitle ? (t.subtitleLabel || 'Event') : 'Venue'))}</span>
+              <span class="lbl">${esc(t.performer ? 'Artist' : (t.subtitle ? (t.subtitleLabel || 'Event') : 'Venue'))}</span>
               <h2>${esc(headline)}</h2>
             </div>
             <span class="when">${expired ? 'Ended' : esc(relative(d))}</span>
           </div>
-          <div class="p-row">${field('Venue', t.venue, 'wide')}${field(t.doors && !t.time && !d ? 'Doors' : 'Time', time || t.doors)}</div>
+          <div class="p-row">${field('Venue', t.venue, 'wide')}${field('Time', time || t.doors)}</div>
           ${seatRow.length ? `<div class="p-row">${seatRow.join('')}</div>` : ''}
           <div class="p-code">
-            <div class="qr" aria-label="Ticket QR code"></div>
-            ${t.code ? `<span class="codetext">${esc(t.code)}</span>` : ''}
+            ${t.demo
+              ? '<div class="qr sample" aria-label="Sample, not valid for entry"><div><b>SAMPLE</b>Not valid<br>for entry</div></div>'
+              : `<div class="qr" aria-label="Ticket QR code"></div>${t.code ? `<span class="codetext">${esc(t.code)}</span>` : ''}`}
           </div>
+          ${t.demo ? '<span class="stamp" aria-hidden="true">DEMO</span>' : ''}
           <button class="info" type="button" aria-label="Ticket details">i</button>
         </section>
         <section class="face back" aria-hidden="true">
           <header class="p-head">
-            <span class="name">${esc(t.event || 'Ticket')}${expired ? '<span class="tag">EXPIRED</span>' : ''}</span>
+            <span class="name">${esc(t.event || 'Ticket')}${expired ? '<span class="tag">EXPIRED</span>' : ''}${t.demo ? '<span class="tag">DEMO</span>' : ''}</span>
             <button class="done" type="button">Done</button>
           </header>
-          <div class="back-in"><dl>${backItems.map(([k, v]) => `<div class="item"><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl></div>
+          <div class="back-in"><dl>${backItems.map(([k, v]) => `<div class="row"><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl></div>
         </section>
       </div>`;
 
-    const qr = el.querySelector('.qr');
-    if (t.code && window.QRCode) {
-      try {
-        new QRCode(qr, { text: String(t.code), width: 228, height: 228, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
-      } catch (e) { qr.innerHTML = '<span class="nocode">Code unavailable</span>'; }
-    } else {
-      qr.innerHTML = `<span class="nocode">${t.code ? esc(t.code) : 'No code yet'}</span>`;
+    if (!t.demo) {
+      const qr = el.querySelector('.qr');
+      if (t.code && window.QRCode) {
+        try {
+          new QRCode(qr, { text: String(t.code), width: 228, height: 228, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+        } catch (e) { qr.innerHTML = '<span class="nocode">Code unavailable</span>'; }
+      } else {
+        qr.innerHTML = `<span class="nocode">${t.code ? esc(t.code) : 'No code yet'}</span>`;
+      }
     }
-
-    el.querySelector('.info').addEventListener('click', e => { e.stopPropagation(); setFlipped(el, true); });
-    el.querySelector('.done').addEventListener('click', e => { e.stopPropagation(); setFlipped(el, false); });
-    el.addEventListener('click', () => onTap(t.id));
-    el.addEventListener('keydown', e => {
-      if (e.target !== el) return;
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onTap(t.id); }
-    });
+    wire(el);
     return el;
   }
 
-  function setFlipped(el, on) {
-    el.classList.toggle('flipped', on);
-    el.querySelector('.back').setAttribute('aria-hidden', String(!on));
-    el.querySelector('.front').setAttribute('aria-hidden', String(on));
-  }
-
-  function onTap(id) {
-    const wasSelected = selected === id;
-    stack.querySelectorAll('.pass.flipped').forEach(p => setFlipped(p, false));
-    selected = wasSelected ? null : id;
-    layout();
-    if (selected) {
-      const top = stack.getBoundingClientRect().top + window.scrollY - 12;
-      if (window.scrollY > top) window.scrollTo({ top, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-    }
-  }
-
-  function layout() {
-    const cards = [...stack.children];
-    const n = cards.length;
-    const css = getComputedStyle(document.documentElement);
-    const H = parseFloat(css.getPropertyValue('--pass-h')) || 470;
-    const peek = parseFloat(css.getPropertyValue('--peek')) || 66;
-    if (!selected || !cards.some(c => c.dataset.id === selected)) {
-      selected = null;
-      cards.forEach((c, i) => {
-        c.style.transform = `translateY(${i * peek}px)`;
-        c.style.zIndex = i + 1;
-        c.classList.remove('sel');
-      });
-      stack.style.height = n ? `${(n - 1) * peek + H}px` : '0px';
-      return;
-    }
-    let k = 0;
-    const others = n - 1;
-    cards.forEach(c => {
-      if (c.dataset.id === selected) {
-        c.style.transform = 'translateY(0)';
-        c.style.zIndex = 200;
-        c.classList.add('sel');
-      } else {
-        const y = H + 28 + Math.min(k, 4) * 9;
-        c.style.transform = `translateY(${y}px) scale(${0.94 + Math.min(k, 4) * 0.012})`;
-        c.style.zIndex = 10 + k;
-        c.classList.remove('sel');
-        k++;
-      }
-    });
-    stack.style.height = others ? `${H + 28 + Math.min(others - 1, 4) * 9 + peek}px` : `${H}px`;
-  }
-
-  function render() {
-    const sorted = sortTickets(tickets);
-    stack.replaceChildren(...sorted.map(buildPass));
-    const upcoming = sorted.filter(t => !isExpired(t)).length;
-    ticketCountText = sorted.length ? `${upcoming} upcoming` : '';
-    if (!views.tickets.hidden) countEl.textContent = ticketCountText;
-    hintEl.hidden = !sorted.length;
-    statusEl.innerHTML = sorted.length ? '' : emptyHTML();
-    layout();
-  }
-
-  const ticketIcon = `<svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a2 2 0 0 0 2-2h14a2 2 0 0 0 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 0-2 2H5a2 2 0 0 0-2-2v-2a2 2 0 0 0 0-4z"/><path d="M15 6v2M15 11v2M15 16v2"/></svg>`;
-  function emptyHTML() {
-    return `<div class="empty">${ticketIcon}
-      <h2>No tickets yet</h2>
-      <p>Tickets you add will stack here, ready to show at the door.</p>
-      <p class="eg">To add one, tell Claude the event, date and time, venue, seat, and the ticket code.</p>
-    </div>`;
-  }
-  function messageHTML(title, body) {
-    return `<div class="empty">${ticketIcon}<h2>${esc(title)}</h2><p>${esc(body)}</p></div>`;
-  }
-
-  // Payment cards (display only)
-  const cardsEl = document.getElementById('cards');
-  const cardsEmpty = document.getElementById('cardsEmpty');
-  const tabs = { cards: document.getElementById('tab-cards'), tickets: document.getElementById('tab-tickets') };
-  const views = { cards: document.getElementById('view-cards'), tickets: document.getElementById('view-tickets') };
-  let cardCount = 0;
-  function showTab(name) {
-    Object.keys(tabs).forEach(k => {
-      tabs[k].setAttribute('aria-selected', String(k === name));
-      tabs[k].tabIndex = k === name ? 0 : -1;
-      views[k].hidden = k !== name;
-    });
-    countEl.textContent = name === 'cards'
-      ? (cardCount ? `${cardCount} card${cardCount === 1 ? '' : 's'}` : '')
-      : ticketCountText;
-    try { localStorage.setItem('wallet-tab', name); } catch (e) {}
-    if (name === 'tickets') layout();
-  }
-  Object.entries(tabs).forEach(([k, b]) => {
-    b.addEventListener('click', () => showTab(k));
-    b.addEventListener('keydown', e => {
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-        e.preventDefault();
-        const next = k === 'cards' ? 'tickets' : 'cards';
-        showTab(next); tabs[next].focus();
-      }
-    });
-  });
-  const CARD_PEEK = 56;
   const chip = `<svg width="38" height="28" viewBox="0 0 38 28" aria-hidden="true"><rect x=".5" y=".5" width="37" height="27" rx="5" fill="#d9b86c" stroke="rgba(0,0,0,.25)"/><path d="M0 9.5h12M0 18.5h12M26 9.5h12M26 18.5h12M12 0v28M26 0v28M12 14h14" stroke="rgba(0,0,0,.28)" fill="none"/></svg>`;
   const wave = `<svg width="20" height="22" viewBox="0 0 20 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="opacity:.8"><path d="M4 6c2 3 2 7 0 10M9 3c3.5 4.5 3.5 11.5 0 16M14 1c4.5 6 4.5 14 0 20"/></svg>`;
-  function shade(hex, f) {
-    const rgb = hexToRgb(hex) || [40, 40, 40];
-    return '#' + rgb.map(v => Math.max(0, Math.min(255, Math.round(v * f))).toString(16).padStart(2, '0')).join('');
-  }
-  function buildCard(c, i) {
+
+  function buildCard(c) {
     const color = hexToRgb(c.color) ? c.color : '#2c2c2e';
-    const { t: tc, l: lc } = textFor(color);
     const last4 = String(c.last4 || '0000').slice(-4);
-    const el = document.createElement('div');
-    el.className = 'card';
-    el.tabIndex = 0;
-    el.setAttribute('role', 'button');
-    el.setAttribute('aria-label', `${c.issuer || 'Card'} ${c.type || ''} ending in ${last4}. Tap for details.`);
-    el.style.marginTop = `${i * CARD_PEEK}px`;
-    el.style.zIndex = i + 1;
-    el.style.setProperty('--c', color);
+    const el = makeItem('card', c.id, color, `${c.issuer || 'Card'} ${c.type || ''} ending in ${last4}`);
     el.style.setProperty('--c2', c.color2 && hexToRgb(c.color2) ? c.color2 : shade(color, .55));
-    el.style.setProperty('--t', tc);
-    el.style.setProperty('--l', lc);
-    const details = [
-      ['Card', `•••• ${last4}`], ['Type', c.type], ['Holder', c.holder], ['Expires', c.expires], ['Balance', c.balance],
-    ].filter(([, v]) => v);
+    const details = [['Card', `•••• ${last4}`], ['Type', c.type], ['Holder', c.holder], ['Expires', c.expires], ['Balance', c.balance]].filter(([, v]) => v);
     el.innerHTML = `
       <div class="flip">
         <div class="cface front">
@@ -469,56 +358,151 @@
             <div><div class="c-num">•••• ${esc(last4)}</div>${c.holder ? `<div class="c-name">${esc(c.holder)}</div>` : ''}</div>
             <span class="c-net">${esc(c.network || '')}</span>
           </div>
+          <button class="info" type="button" aria-label="Card details">i</button>
         </div>
         <div class="cface back" aria-hidden="true">
-          <div class="c-top"><span class="c-issuer">${esc(c.issuer || 'Card')}</span><span class="c-type">Details</span></div>
+          <div class="c-top"><span class="c-issuer">${esc(c.issuer || 'Card')}</span><button class="done" type="button">Done</button></div>
           <dl>${details.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
           <p class="fine">${esc(c.note || 'Display only. This is not a real card and cannot make payments.')}</p>
         </div>
       </div>`;
-    const flip = () => {
-      const on = !el.classList.contains('flipped');
-      el.classList.toggle('flipped', on);
-      el.querySelector('.back').setAttribute('aria-hidden', String(!on));
-      el.querySelector('.front').setAttribute('aria-hidden', String(on));
-    };
-    el.addEventListener('click', flip);
-    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } });
+    wire(el);
     return el;
   }
-  function renderCards(list) {
-    list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    cardsEl.replaceChildren(...list.map(buildCard));
-    cardCount = list.length;
-    cardsEmpty.innerHTML = list.length ? '' : messageHTML('No cards yet', 'Cards you add will show here.');
-    if (!views.cards.hidden) showTab('cards');
+
+  function setFlipped(el, on) {
+    el.classList.toggle('flipped', on);
+    el.querySelector('.back').setAttribute('aria-hidden', String(!on));
+    el.querySelector('.front').setAttribute('aria-hidden', String(on));
   }
-  let initialTab = 'tickets';
-  try { if (localStorage.getItem('wallet-tab') === 'cards') initialTab = 'cards'; } catch (e) {}
-  showTab(initialTab);
+  function unflipAll() { stack.querySelectorAll('.item.flipped').forEach(p => setFlipped(p, false)); }
+
+  function onTap(key) {
+    unflipAll();
+    selected = selected === key ? null : key;
+    layout();
+    if (selected) {
+      const top = stack.getBoundingClientRect().top + window.scrollY - 12;
+      if (window.scrollY > top) window.scrollTo({ top, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    }
+  }
+  function go(step) {
+    const els = [...stack.querySelectorAll('.item')];
+    const i = els.findIndex(e => e.dataset.key === selected);
+    const j = i + step;
+    if (i < 0 || j < 0 || j >= els.length) return;
+    unflipAll();
+    selected = els[j].dataset.key;
+    layout();
+    els[j].focus({ preventScroll: true });
+  }
+
+  function layout() {
+    const els = [...stack.querySelectorAll('.item')];
+    const n = els.length;
+    const cardH = Math.round(stack.clientWidth / 1.586);
+    const hOf = el => el.dataset.kind === 'card' ? cardH : PASS_H;
+    const peekOf = el => el.dataset.kind === 'card' ? CARD_PEEK : PASS_PEEK;
+    els.forEach(el => { el.style.height = hOf(el) + 'px'; });
+
+    const selIdx = els.findIndex(e => e.dataset.key === selected);
+    if (selIdx < 0) {
+      selected = null;
+      let y = 0;
+      els.forEach((el, i) => {
+        el.style.transform = `translateY(${y}px)`;
+        el.style.zIndex = i + 1;
+        el.classList.remove('sel');
+        if (i < n - 1) y += peekOf(el);
+      });
+      stack.style.height = n ? `${y + hOf(els[n - 1])}px` : '0px';
+      dots.style.opacity = 0;
+      return;
+    }
+    const selEl = els[selIdx];
+    const selH = hOf(selEl);
+    const pileTop = selH + 44;
+    let k = 0;
+    els.forEach(el => {
+      if (el === selEl) {
+        el.style.transform = 'translateY(0)';
+        el.style.zIndex = 200;
+        el.classList.add('sel');
+      } else {
+        const s = Math.min(k, 4);
+        el.style.transform = `translateY(${pileTop + s * 9}px) scale(${0.94 + s * 0.012})`;
+        el.style.zIndex = 10 + k;
+        el.classList.remove('sel');
+        k++;
+      }
+    });
+    dots.innerHTML = n > 1 ? els.map((_, i) => `<i class="${i === selIdx ? 'on' : ''}"></i>`).join('') : '';
+    dots.style.top = `${selH + 16}px`;
+    dots.style.opacity = 1;
+    stack.style.height = k ? `${pileTop + Math.min(k - 1, 4) * 9 + 60}px` : `${selH + 30}px`;
+  }
+
+  // Swipe sideways on the open item to move to the next one
+  let sx = 0, sy = 0, tracking = false;
+  stack.addEventListener('pointerdown', e => { if (!selected) return; tracking = true; sx = e.clientX; sy = e.clientY; });
+  stack.addEventListener('pointerup', e => {
+    if (!tracking) return;
+    tracking = false;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      suppressClick = true;
+      setTimeout(() => { suppressClick = false; }, 0);
+      go(dx < 0 ? 1 : -1);
+    }
+  });
+  stack.addEventListener('pointercancel', () => { tracking = false; });
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && selected) { onTap(selected); }
+    if (!selected) return;
+    if (e.key === 'Escape') onTap(selected);
+    else if (e.key === 'ArrowRight') go(1);
+    else if (e.key === 'ArrowLeft') go(-1);
   });
   window.addEventListener('resize', layout);
 
-  statusEl.innerHTML = messageHTML('Loading tickets', 'Fetching your wallet…');
+  const walletIcon = `<svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3 9h18M3 12.5h18"/></svg>`;
+  function messageHTML(title, body) {
+    return `<div class="empty">${walletIcon}<h2>${esc(title)}</h2><p>${esc(body)}</p></div>`;
+  }
+
+  function render() {
+    if (!loadedCards && !loadedTickets) return;
+    const sortedCards = [...cards].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const sortedTickets = sortTickets(tickets);
+    stack.replaceChildren(...sortedCards.map(buildCard), ...sortedTickets.map(buildTicket), dots);
+    const total = sortedCards.length + sortedTickets.length;
+    const upcoming = sortedTickets.filter(t => !isExpired(t)).length;
+    const parts = [];
+    if (sortedCards.length) parts.push(`${sortedCards.length} card${sortedCards.length === 1 ? '' : 's'}`);
+    if (sortedTickets.length) parts.push(`${upcoming} upcoming`);
+    countEl.textContent = parts.join(' · ');
+    hintEl.hidden = !total;
+    statusEl.innerHTML = total ? '' : messageHTML('Nothing here yet', 'Cards and tickets you add will stack here, ready to show at the door.');
+    layout();
+  }
+
+  statusEl.innerHTML = messageHTML('Loading', 'Opening your wallet…');
 
   (async () => {
     const db = window.claude ? await window.claude.use('db') : null;
     if (!db) {
-      statusEl.innerHTML = messageHTML('Tickets unavailable', 'Sign in to claude.ai to see your saved tickets.');
+      statusEl.innerHTML = messageHTML('Wallet unavailable', 'Sign in to claude.ai to see your saved cards and tickets.');
       return;
     }
+    const fail = () => { statusEl.innerHTML = messageHTML('Wallet unavailable', 'Your wallet could not load. Reload the page to try again.'); };
     db.collection('cards').onSnapshot(snap => {
-      renderCards(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, () => {});
+      cards = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      loadedCards = true; render();
+    }, fail);
     db.collection('tickets').onSnapshot(snap => {
       tickets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      render();
-    }, () => {
-      statusEl.innerHTML = messageHTML('Tickets unavailable', 'The ticket list could not load. Reload the page to try again.');
-    });
+      loadedTickets = true; render();
+    }, fail);
   })();
 })();
 </script>
