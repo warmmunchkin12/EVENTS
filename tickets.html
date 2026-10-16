@@ -1,0 +1,382 @@
+<title>Ticket Wallet</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: one centered column like Apple Wallet; passes stack with only their header strips showing, tap to bring one forward. */
+  :root {
+    --bg: #f2f2f7;
+    --fg: #1c1c1e;
+    --muted: #6e6e73;
+    --ghost: #c7c7cc;
+    --ghost-fill: rgba(255,255,255,.55);
+    --shadow: 0 1px 2px rgba(0,0,0,.08), 0 8px 24px rgba(0,0,0,.10);
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", system-ui, Arial, sans-serif;
+    --pass-h: 470px;
+    --peek: 66px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #000; --fg: #f5f5f7; --muted: #98989f; --ghost: #3a3a3c; --ghost-fill: rgba(255,255,255,.04);
+      --shadow: 0 1px 2px rgba(0,0,0,.6), 0 10px 30px rgba(0,0,0,.6);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #000; --fg: #f5f5f7; --muted: #98989f; --ghost: #3a3a3c; --ghost-fill: rgba(255,255,255,.04);
+    --shadow: 0 1px 2px rgba(0,0,0,.6), 0 10px 30px rgba(0,0,0,.6);
+    color-scheme: dark;
+  }
+  html, body { background: var(--bg); color: var(--fg); }
+  body { font-family: var(--font); -webkit-font-smoothing: antialiased; }
+
+  .app {
+    max-width: 420px; margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 20px 40px;
+  }
+  .top { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+  .top h1 { font-size: 34px; font-weight: 700; letter-spacing: -.02em; margin: 0; line-height: 1.1; }
+  .top .count { color: var(--muted); font-size: 15px; padding-bottom: 4px; font-variant-numeric: tabular-nums; }
+
+  /* Stack */
+  .stack { position: relative; transition: height .45s cubic-bezier(.2,.8,.2,1); }
+  .pass {
+    position: absolute; left: 0; right: 0; top: 0; height: var(--pass-h);
+    perspective: 1400px; cursor: pointer; outline: none;
+    transition: transform .45s cubic-bezier(.2,.8,.2,1), filter .3s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .pass:focus-visible .face { box-shadow: 0 0 0 3px #0a84ff, var(--shadow); }
+  .flip { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .6s cubic-bezier(.3,.7,.2,1); }
+  .pass.flipped .flip { transform: rotateY(180deg); }
+  .face {
+    position: absolute; inset: 0; border-radius: 14px; overflow: hidden;
+    background: var(--c); color: var(--t);
+    box-shadow: var(--shadow);
+    backface-visibility: hidden; -webkit-backface-visibility: hidden;
+    display: flex; flex-direction: column;
+    /* event-ticket notch at the top edge */
+    -webkit-mask: radial-gradient(circle 15px at 50% 0, transparent 14px, #000 15px);
+            mask: radial-gradient(circle 15px at 50% 0, transparent 14px, #000 15px);
+  }
+  .face.back { transform: rotateY(180deg); }
+  .face::before { /* soft sheen */
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(160deg, rgba(255,255,255,.16), rgba(255,255,255,0) 40%, rgba(0,0,0,.10));
+  }
+
+  .lbl { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--l); }
+  .val { display: block; font-size: 17px; font-weight: 500; line-height: 1.2; overflow-wrap: anywhere; }
+
+  .p-head { height: var(--peek); flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px; position: relative; }
+  .p-head .name { font-size: 17px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .p-head .hf { text-align: right; flex: none; }
+  .p-head .hf .val { font-variant-numeric: tabular-nums; }
+
+  .p-strip { flex: none; padding: 14px 16px 16px; background: rgba(0,0,0,.14); position: relative; display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
+  .p-strip h2 { margin: 2px 0 0; font-size: 26px; font-weight: 700; line-height: 1.1; letter-spacing: -.02em; text-wrap: balance; overflow-wrap: anywhere; }
+  .p-strip .when { font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--l); padding-bottom: 3px; }
+
+  .p-row { display: flex; gap: 14px; padding: 12px 16px 0; position: relative; }
+  .p-row > div { min-width: 0; flex: 1; }
+  .p-row > div.wide { flex: 2.2; }
+  .p-row > div:last-child:not(:first-child) { text-align: right; }
+  .p-row .val { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .p-code { margin-top: auto; padding: 0 16px 16px; display: flex; flex-direction: column; align-items: center; gap: 6px; position: relative; }
+  .qr { background: #fff; padding: 9px; border-radius: 8px; width: 132px; height: 132px; box-sizing: border-box; display: grid; place-items: center; }
+  .qr img, .qr canvas { width: 114px !important; height: 114px !important; image-rendering: pixelated; }
+  .qr .nocode { color: #1c1c1e; font-size: 11px; text-align: center; }
+  .p-code .codetext { font-size: 11px; font-variant-numeric: tabular-nums; letter-spacing: .04em; color: var(--l); }
+
+  .info {
+    position: absolute; right: 12px; bottom: 12px; width: 30px; height: 30px; border-radius: 50%;
+    border: 0; background: rgba(0,0,0,.18); color: var(--t); font: 600 15px/1 var(--font); cursor: pointer;
+    display: grid; place-items: center; opacity: 0; pointer-events: none; transition: opacity .25s;
+  }
+  .info:focus-visible, .done:focus-visible { outline: 2px solid var(--t); outline-offset: 2px; }
+  .pass.sel .info { opacity: 1; pointer-events: auto; }
+
+  .back-in { padding: 0 16px 16px; overflow-y: auto; flex: 1; position: relative; }
+  .back-in dl { margin: 0; display: grid; gap: 0; }
+  .back-in .item { padding: 11px 0; border-bottom: 1px solid rgba(127,127,127,.28); }
+  .back-in .item:last-child { border-bottom: 0; }
+  .back-in dt { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--l); margin-bottom: 3px; }
+  .back-in dd { margin: 0; font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; white-space: pre-line; }
+  .done {
+    border: 0; background: rgba(0,0,0,.18); color: var(--t); border-radius: 999px;
+    font: 600 14px/1 var(--font); padding: 8px 14px; cursor: pointer;
+  }
+
+  .pass.expired .face { filter: saturate(.35) brightness(.92); }
+  .tag { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .06em; padding: 3px 6px; border-radius: 5px; background: rgba(0,0,0,.22); color: var(--t); vertical-align: middle; margin-left: 6px; }
+
+  /* Empty / status states */
+  .empty {
+    border: 2px dashed var(--ghost); border-radius: 14px; background: var(--ghost-fill);
+    min-height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 32px 24px; gap: 10px; box-sizing: border-box;
+  }
+  .empty svg { color: var(--muted); }
+  .empty h2 { margin: 6px 0 0; font-size: 20px; font-weight: 600; }
+  .empty p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.45; max-width: 30ch; }
+  .empty .eg { margin-top: 8px; font-size: 13px; color: var(--muted); font-style: italic; max-width: 34ch; }
+  .hint { text-align: center; color: var(--muted); font-size: 13px; margin-top: 18px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .stack, .pass, .flip, .info { transition: none !important; }
+  }
+</style>
+
+<main class="app">
+  <div class="top">
+    <h1>Tickets</h1>
+    <span class="count" id="count"></span>
+  </div>
+  <div class="stack" id="stack" aria-live="polite"></div>
+  <div id="status"></div>
+  <p class="hint" id="hint" hidden>Tap a ticket to open it. Tap ⓘ for details.</p>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+(() => {
+  const stack = document.getElementById('stack');
+  const statusEl = document.getElementById('status');
+  const countEl = document.getElementById('count');
+  const hintEl = document.getElementById('hint');
+  const PALETTE = ['#c7253e', '#1f4e8c', '#0f7b5f', '#6b2fa3', '#d9822b', '#1c1c1e', '#b0336d', '#2a6f97'];
+
+  let tickets = [];
+  let selected = null;
+
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function parseDate(s) {
+    if (!s) return null;
+    const d = new Date(s);
+    return isNaN(d) ? null : d;
+  }
+  function hexToRgb(h) {
+    const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(h || '').trim());
+    if (!m) return null;
+    let x = m[1]; if (x.length === 3) x = x.split('').map(c => c + c).join('');
+    return [0, 2, 4].map(i => parseInt(x.slice(i, i + 2), 16));
+  }
+  function textFor(bg) {
+    const rgb = hexToRgb(bg) || [0, 0, 0];
+    const [r, g, b] = rgb.map(v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; });
+    const L = .2126 * r + .7152 * g + .0722 * b;
+    return L > .45 ? { t: '#111', l: 'rgba(0,0,0,.6)' } : { t: '#fff', l: 'rgba(255,255,255,.72)' };
+  }
+  function fmtShort(d) { return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }).toUpperCase(); }
+  function fmtTime(d) { return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }); }
+  function fmtLong(d) { return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) + ' at ' + fmtTime(d); }
+  function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
+  function relative(d) {
+    if (!d) return '';
+    const days = Math.round((startOfDay(d) - startOfDay(new Date())) / 864e5);
+    if (days < 0) return 'Ended';
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Tomorrow';
+    if (days < 60) return `In ${days} days`;
+    return `In ${Math.round(days / 30)} months`;
+  }
+  function isExpired(t) {
+    const d = parseDate(t.date);
+    if (!d) return false;
+    return startOfDay(d) < startOfDay(new Date());
+  }
+
+  function sortTickets(list) {
+    const up = list.filter(t => !isExpired(t)).sort((a, b) => (parseDate(a.date) || Infinity) - (parseDate(b.date) || Infinity));
+    const past = list.filter(isExpired).sort((a, b) => parseDate(b.date) - parseDate(a.date));
+    return [...up, ...past];
+  }
+
+  function field(label, value, cls = '') {
+    if (value == null || value === '') return '';
+    return `<div class="${cls}"><span class="lbl">${esc(label)}</span><span class="val">${esc(value)}</span></div>`;
+  }
+
+  function buildPass(t, i) {
+    const d = parseDate(t.date);
+    const color = hexToRgb(t.color) ? t.color : PALETTE[i % PALETTE.length];
+    const { t: tc, l: lc } = textFor(color);
+    const expired = isExpired(t);
+    const el = document.createElement('article');
+    el.className = 'pass' + (expired ? ' expired' : '');
+    el.dataset.id = t.id;
+    el.tabIndex = 0;
+    el.setAttribute('role', 'button');
+    el.setAttribute('aria-label', `${t.event || 'Ticket'}${d ? ', ' + fmtLong(d) : ''}`);
+    el.style.setProperty('--c', color);
+    el.style.setProperty('--t', tc);
+    el.style.setProperty('--l', lc);
+
+    const time = t.time || (d ? fmtTime(d) : '');
+    const seatRow = [field('Gate', t.gate), field('Section', t.section), field('Row', t.row), field('Seat', t.seat)].filter(Boolean);
+    if (!seatRow.length && t.admit) seatRow.push(field('Admit', t.admit));
+    const headline = t.performer || t.subtitle || t.venue || 'Admission';
+
+    const backItems = [
+      ['Event', t.event],
+      ['Date', d ? fmtLong(d) : t.date],
+      ['Doors', t.doors],
+      ['Venue', [t.venue, t.address || t.city].filter(Boolean).join('\n')],
+      ['Ticket holder', t.holder],
+      ['Ticket type', t.ticketType],
+      ['Admit', t.admit],
+      ['Seat', [t.section && 'Section ' + t.section, t.row && 'Row ' + t.row, t.seat && 'Seat ' + t.seat].filter(Boolean).join(' · ')],
+      ['Order number', t.orderNumber],
+      ['Sold by', t.organizer],
+      ['Price', t.price],
+      ['Notes', t.notes],
+      ['Ticket code', t.code],
+    ].filter(([, v]) => v != null && v !== '');
+
+    el.innerHTML = `
+      <div class="flip">
+        <section class="face front">
+          <header class="p-head">
+            <span class="name">${esc(t.event || 'Ticket')}</span>
+            <div class="hf"><span class="lbl">${d ? 'Date' : 'Admit'}</span><span class="val">${esc(d ? fmtShort(d) : (t.admit || '1'))}</span></div>
+          </header>
+          <div class="p-strip">
+            <div style="min-width:0">
+              <span class="lbl">${esc(t.performer ? 'Featuring' : (t.subtitle ? (t.subtitleLabel || 'Event') : 'Venue'))}</span>
+              <h2>${esc(headline)}</h2>
+            </div>
+            <span class="when">${expired ? 'Ended' : esc(relative(d))}</span>
+          </div>
+          <div class="p-row">${field('Venue', t.venue, 'wide')}${field(t.doors && !t.time && !d ? 'Doors' : 'Time', time || t.doors)}</div>
+          ${seatRow.length ? `<div class="p-row">${seatRow.join('')}</div>` : ''}
+          <div class="p-code">
+            <div class="qr" aria-label="Ticket QR code"></div>
+            ${t.code ? `<span class="codetext">${esc(t.code)}</span>` : ''}
+          </div>
+          <button class="info" type="button" aria-label="Ticket details">i</button>
+        </section>
+        <section class="face back" aria-hidden="true">
+          <header class="p-head">
+            <span class="name">${esc(t.event || 'Ticket')}${expired ? '<span class="tag">EXPIRED</span>' : ''}</span>
+            <button class="done" type="button">Done</button>
+          </header>
+          <div class="back-in"><dl>${backItems.map(([k, v]) => `<div class="item"><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl></div>
+        </section>
+      </div>`;
+
+    const qr = el.querySelector('.qr');
+    if (t.code && window.QRCode) {
+      try {
+        new QRCode(qr, { text: String(t.code), width: 228, height: 228, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+      } catch (e) { qr.innerHTML = '<span class="nocode">Code unavailable</span>'; }
+    } else {
+      qr.innerHTML = `<span class="nocode">${t.code ? esc(t.code) : 'No code yet'}</span>`;
+    }
+
+    el.querySelector('.info').addEventListener('click', e => { e.stopPropagation(); setFlipped(el, true); });
+    el.querySelector('.done').addEventListener('click', e => { e.stopPropagation(); setFlipped(el, false); });
+    el.addEventListener('click', () => onTap(t.id));
+    el.addEventListener('keydown', e => {
+      if (e.target !== el) return;
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onTap(t.id); }
+    });
+    return el;
+  }
+
+  function setFlipped(el, on) {
+    el.classList.toggle('flipped', on);
+    el.querySelector('.back').setAttribute('aria-hidden', String(!on));
+    el.querySelector('.front').setAttribute('aria-hidden', String(on));
+  }
+
+  function onTap(id) {
+    const wasSelected = selected === id;
+    stack.querySelectorAll('.pass.flipped').forEach(p => setFlipped(p, false));
+    selected = wasSelected ? null : id;
+    layout();
+    if (selected) {
+      const top = stack.getBoundingClientRect().top + window.scrollY - 12;
+      if (window.scrollY > top) window.scrollTo({ top, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    }
+  }
+
+  function layout() {
+    const cards = [...stack.children];
+    const n = cards.length;
+    const css = getComputedStyle(document.documentElement);
+    const H = parseFloat(css.getPropertyValue('--pass-h')) || 470;
+    const peek = parseFloat(css.getPropertyValue('--peek')) || 66;
+    if (!selected || !cards.some(c => c.dataset.id === selected)) {
+      selected = null;
+      cards.forEach((c, i) => {
+        c.style.transform = `translateY(${i * peek}px)`;
+        c.style.zIndex = i + 1;
+        c.classList.remove('sel');
+      });
+      stack.style.height = n ? `${(n - 1) * peek + H}px` : '0px';
+      return;
+    }
+    let k = 0;
+    const others = n - 1;
+    cards.forEach(c => {
+      if (c.dataset.id === selected) {
+        c.style.transform = 'translateY(0)';
+        c.style.zIndex = 200;
+        c.classList.add('sel');
+      } else {
+        const y = H + 28 + Math.min(k, 4) * 9;
+        c.style.transform = `translateY(${y}px) scale(${0.94 + Math.min(k, 4) * 0.012})`;
+        c.style.zIndex = 10 + k;
+        c.classList.remove('sel');
+        k++;
+      }
+    });
+    stack.style.height = others ? `${H + 28 + Math.min(others - 1, 4) * 9 + peek}px` : `${H}px`;
+  }
+
+  function render() {
+    const sorted = sortTickets(tickets);
+    stack.replaceChildren(...sorted.map(buildPass));
+    const upcoming = sorted.filter(t => !isExpired(t)).length;
+    countEl.textContent = sorted.length ? `${upcoming} upcoming` : '';
+    hintEl.hidden = !sorted.length;
+    statusEl.innerHTML = sorted.length ? '' : emptyHTML();
+    layout();
+  }
+
+  const ticketIcon = `<svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a2 2 0 0 0 2-2h14a2 2 0 0 0 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 0-2 2H5a2 2 0 0 0-2-2v-2a2 2 0 0 0 0-4z"/><path d="M15 6v2M15 11v2M15 16v2"/></svg>`;
+  function emptyHTML() {
+    return `<div class="empty">${ticketIcon}
+      <h2>No tickets yet</h2>
+      <p>Tickets you add will stack here, ready to show at the door.</p>
+      <p class="eg">To add one, tell Claude the event, date and time, venue, seat, and the ticket code.</p>
+    </div>`;
+  }
+  function messageHTML(title, body) {
+    return `<div class="empty">${ticketIcon}<h2>${esc(title)}</h2><p>${esc(body)}</p></div>`;
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && selected) { onTap(selected); }
+  });
+  window.addEventListener('resize', layout);
+
+  statusEl.innerHTML = messageHTML('Loading tickets', 'Fetching your wallet…');
+
+  (async () => {
+    const db = window.claude ? await window.claude.use('db') : null;
+    if (!db) {
+      statusEl.innerHTML = messageHTML('Tickets unavailable', 'Sign in to claude.ai to see your saved tickets.');
+      return;
+    }
+    db.collection('tickets').onSnapshot(snap => {
+      tickets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      render();
+    }, () => {
+      statusEl.innerHTML = messageHTML('Tickets unavailable', 'The ticket list could not load. Reload the page to try again.');
+    });
+  })();
+})();
+</script>
